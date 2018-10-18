@@ -2,6 +2,7 @@ msgPort = CreateObject("roMessagePort")
 r = CreateObject("roRectangle", 0, 0, 1920, 1080)
 
 config = {
+     nodejs_enabled: true
      inspector_server: { port: 3000 }
      url: "file:///sd:/index.html"
      hwz_default: "on"

@@ -10,11 +10,128 @@
             color: #FFF;
         }
     </style>
+    <script type="text/javascript">
+        'use strict';
+        var fs = require('fs');
+        var clientID = "mediaplayer01";
+        var wsUri = "ws://172.16.57.219:1111" + "?clientID=" + clientID;
+        var videoElement;
+        var websocket;
+
+        function setup() {
+            videoElement = document.getElementById("videoElement");
+            setupWebsocket();
+        }
+
+        // Make websocket connection & register handlers
+        function setupWebsocket() {
+            console.log("Setting up websocket to receive video file");
+            websocket = new WebSocket(wsUri);
+            websocket.onopen = function (evt) {
+                onOpen(evt)
+            };
+            websocket.onclose = function (evt) {
+                onClose(evt)
+            };
+            websocket.onmessage = function (evt) {
+                onMessage(evt)
+            };
+            websocket.onerror = function (evt) {
+                onError(evt)
+            };
+        }
+
+        function onOpen(evt) {
+            console.log("Websocket connection open");
+        }
+
+        function onClose(evt) {
+            console.log("Websocket connection closed");
+        }
+
+        // Receive websocket message with new file URL
+        function onMessage(evt) {
+            console.log("Message received", evt);
+            fetchMedia(evt.data);
+        }
+
+        function onError(err) {
+            console.log("Error occurred: ", err);
+        }
+
+        function doSend(message) {
+            console.log("SENT: ", message);
+            websocket.send(message);
+        }
+
+        // Save file to SD card
+        function fetchMedia(url) {
+            let filename = "video.mp4";
+            let filepath = "/storage/sd/" + filename;
+            var writer = fs.createWriteStream(filepath, {defaultEncoding: 'binary'});
+            let soFar;
+            let contentLength;
+            var updateCounter = 0;
+            console.log("Attempting to download file from " + url + " to " + filepath);
+
+            fetch(url).then(function (res) {
+                soFar = 0;
+                contentLength = res.headers.get('Content-Length');
+                console.log("Content length: ", contentLength);
+                return fetchChunk(res.body.getReader());
+            }).catch(function (e) {
+                console.log("Error in fetch");
+                onError(e);
+            });
+
+            function fetchChunk(reader) {
+                return reader.read().then(function (result) {
+                    if (result.done) {
+                        console.log("All done! " + soFar + "bytes total");
+                        writer.end();
+                        playMedia(filename);
+                        return;
+                    }
+
+                    const chunk = result.value;
+                    writer.write(new Buffer(chunk));
+                    soFar += chunk.byteLength;
+                    updateProgress();
+                    return fetchChunk(reader);
+                })
+            }
+
+            function updateProgress() {
+                updateCounter += 1;
+                if (updateCounter >= 150) {
+                    if (contentLength) {
+                        console.log((soFar / contentLength * 100).toFixed(2) + "% is downloaded");
+                        updateCounter = 0;
+                    }
+                    else {
+                        console.log(soFar + " bytes are downloaded");
+                    }
+                    updateCounter = 0;
+                }
+            }
+        }
+
+        // Replace video source and re-start video
+        function playMedia(filename) {
+            var source = document.createElement('source');
+            source.setAttribute('src', filename);
+            videoElement.innerHTML = '';
+            videoElement.appendChild(source);
+            videoElement.load();
+            videoElement.play();
+            console.log("Now playing " + filename);
+        }
+
+        window.addEventListener("load", setup, false);
+    </script>
 </head>
 <body>
-<video width="100%" height="100%" autoplay loop>
-    <source src="video.mp4" type="video/mp4">
-    Your browser does not support the video tag.
+<video id="videoElement" width="100%" height="100%" autoplay loop>
 </video>
 </body>
 </html>
